@@ -62,6 +62,9 @@ class TemplateProcessor
      */
     protected $tempDocumentFooters = array();
 
+    protected $_rels;
+    protected $_types;
+
     /**
      * @since 0.12.0 Throws CreateTemporaryFileException and CopyFileException instead of Exception.
      *
@@ -101,6 +104,7 @@ class TemplateProcessor
             $index++;
         }
         $this->tempDocumentMainPart = $this->fixBrokenMacros($this->zipClass->getFromName($this->getMainPartName()));
+        $this->_countRels = 100;
     }
 
     /**
@@ -147,7 +151,7 @@ class TemplateProcessor
 
     /**
      * Applies XSL style sheet to template's parts.
-     * 
+     *
      * Note: since the method doesn't make any guess on logic of the provided XSL style sheet,
      * make sure that output is correctly escaped. Otherwise you may get broken document.
      *
@@ -237,6 +241,97 @@ class TemplateProcessor
     }
 
     /**
+     * Set a new image
+     * https://github.com/PHPOffice/PHPWord/issues/550#issuecomment-173124383
+     * @param string $search
+     * @param string $replace
+     */
+    public function setImageValue($search, $replace)
+    {
+        // Sanity check
+        if (!file_exists($replace)) {
+            return;
+        }
+        // Delete current image
+        $this->zipClass->deleteName('word/media/' . $search);
+        // Add a new one
+        $this->zipClass->addFile($replace, 'word/media/' . $search);
+    }
+
+    /**
+     * https://github.com/PHPOffice/PHPWord/issues/550#issuecomment-173124383
+     * @param $strKey
+     * @param $img
+     */
+    public function setImg($strKey, $img)
+    {
+        $strKey = '${' . $strKey . '}';
+
+        $relationshipTemplate = '<Relationship Id="RID" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/IMG"/>';
+        $imageTemplate = '<w:pict><v:shape type="#_x0000_t75" style="width:WIDpx;height:HEIpx"><v:imagedata r:id="RID" o:title=""/></v:shape></w:pict>';
+
+        $toAdd = $imagePart = $toAddType = '';
+        $aSearch = array('RID', 'IMG');
+        $aSearchType = array('IMG', 'EXT');
+        $this->_countRels++;
+
+        $rid = 'rId' . $this->_countRels;
+
+        $imgExt = pathinfo($img['src'], PATHINFO_EXTENSION);
+        $imgName = 'img' . $this->_countRels . '.' . $imgExt;
+
+        $this->zipClass->deleteName('word/media/' . $imgName);
+        $this->zipClass->addFile($img['src'], 'word/media/' . $imgName);
+
+        $contentTypeTemplate = '<Override PartName="/word/media/' . $imgName . '" ContentType="image/EXT"/>';
+
+        list($w, $h) = getimagesize($img['src']);
+
+        if (isset($img['swh'])) //Image proportionally larger side
+        {
+            $wh = 0;
+            $ht = 0;
+            if ($w <= $h) {
+                $ht = (int)$img['swh'];
+                $ot = $w / $h;
+                $wh = (int)$img['swh'] * $ot;
+                $wh = round($wh);
+            }
+            if ($w >= $h) {
+                $wh = (int)$img['swh'];
+                $ot = $h / $w;
+                $ht = (int)$img['swh'] * $ot;
+                $ht = round($ht);
+            }
+            $w = $wh;
+            $h = $ht;
+        }
+
+        if (isset($img['size'])) {
+            $w = $img['size'][0];
+            $h = $img['size'][1];
+        }
+
+        $imagePart .= str_replace(['RID', 'WID', 'HEI'], [$rid, $w, $h], $imageTemplate);
+
+        $aReplace = array($imgName, $imgExt);
+        $toAddType .= str_replace($aSearchType, $aReplace, $contentTypeTemplate);
+
+        $aReplace = array($rid, $imgName);
+        $toAdd .= str_replace($aSearch, $aReplace, $relationshipTemplate);
+
+        $this->tempDocumentMainPart = str_replace('<w:t>' . $strKey . '</w:t>', $imagePart, $this->tempDocumentMainPart);
+
+        if ($this->_rels == "") {
+            $this->_rels = $this->zipClass->getFromName('word/_rels/document.xml.rels');
+            $this->_types = $this->zipClass->getFromName('[Content_Types].xml');
+        }
+
+        $this->_types = str_replace('</Types>', $toAddType, $this->_types) . '</Types>';
+        $this->_rels = str_replace('</Relationships>', $toAdd, $this->_rels) . '</Relationships>';
+    }
+
+    /**
      * Returns array of all variables in template.
      *
      * @return string[]
@@ -297,7 +392,8 @@ class TemplateProcessor
                 // If tmpXmlRow doesn't contain continue, this row is no longer part of the spanned row.
                 $tmpXmlRow = $this->getSlice($extraRowStart, $extraRowEnd);
                 if (!preg_match('#<w:vMerge/>#', $tmpXmlRow) &&
-                    !preg_match('#<w:vMerge w:val="continue" />#', $tmpXmlRow)) {
+                    !preg_match('#<w:vMerge w:val="continue" />#', $tmpXmlRow)
+                ) {
                     break;
                 }
                 // This row was a spanned row, update $rowEnd and search for the next row.
@@ -403,6 +499,13 @@ class TemplateProcessor
         }
 
         $this->zipClass->addFromString($this->getMainPartName(), $this->tempDocumentMainPart);
+
+        if ($this->_rels != "") {
+            $this->zipClass->addFromString('word/_rels/document.xml.rels', $this->_rels);
+        }
+        if ($this->_types != "") {
+            $this->zipClass->addFromString('[Content_Types].xml', $this->_types);
+        }
 
         foreach ($this->tempDocumentFooters as $index => $xml) {
             $this->zipClass->addFromString($this->getFooterName($index), $xml);
