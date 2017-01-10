@@ -265,8 +265,6 @@ class TemplateProcessor
      */
     public function setImg($strKey, $img)
     {
-        $strKey = '${' . $strKey . '}';
-
         $relationshipTemplate = '<Relationship Id="RID" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/IMG"/>';
         $imageTemplate = '<w:pict><v:shape type="#_x0000_t75" style="width:WIDpx;height:HEIpx"><v:imagedata r:id="RID" o:title=""/></v:shape></w:pict>';
 
