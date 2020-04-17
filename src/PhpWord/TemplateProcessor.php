@@ -906,6 +906,12 @@ class TemplateProcessor
      */
     public function save()
     {
+        foreach ($this->tempDocumentHeaders as $index => $xml) {
+            $this->savePartWithRels($this->getHeaderName($index), $xml);
+        }
+
+        $this->savePartWithRels($this->getMainPartName(), $this->tempDocumentMainPart);
+
 		if ($this->_rels != "") {
 			$this->zipClass->addFromString('word/_rels/document.xml.rels', $this->_rels);
 		}
@@ -913,12 +919,7 @@ class TemplateProcessor
 			$this->zipClass->addFromString('[Content_Types].xml', $this->_types);
 		}
 		
-        foreach ($this->tempDocumentHeaders as $index => $xml) {
-            $this->savePartWithRels($this->getHeaderName($index), $xml);
-        }
-
-        $this->savePartWithRels($this->getMainPartName(), $this->tempDocumentMainPart);
-        $this->savePartWithRels($this->getSettingsPartName(), $this->tempDocumentSettingsPart);
+		$this->savePartWithRels($this->getSettingsPartName(), $this->tempDocumentSettingsPart);
 
         foreach ($this->tempDocumentFooters as $index => $xml) {
             $this->savePartWithRels($this->getFooterName($index), $xml);
