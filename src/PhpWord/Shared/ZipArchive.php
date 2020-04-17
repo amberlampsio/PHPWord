@@ -85,7 +85,6 @@ class ZipArchive
             if (!defined('PCLZIP_TEMPORARY_DIR')) {
                 define('PCLZIP_TEMPORARY_DIR', Settings::getTempDir() . '/');
             }
-            require_once 'PCLZip/pclzip.lib.php';
         }
     }
 
@@ -339,6 +338,7 @@ class ZipArchive
         $zip = $this->zip;
         $listIndex = $this->pclzipLocateName($filename);
         $contents = false;
+        
 
         if ($listIndex !== false) {
             $extracted = $zip->extractByIndex($listIndex, PCLZIP_OPT_EXTRACT_AS_STRING);
