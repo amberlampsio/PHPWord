@@ -91,10 +91,6 @@ class TemplateProcessor
      */
     protected $tempDocumentNewImages = array();
     
-	protected $_rels;
-	protected $_types;
-	protected $_countRels;
-
     /**
      * @since 0.12.0 Throws CreateTemporaryFileException and CopyFileException instead of Exception
      *
@@ -133,84 +129,8 @@ class TemplateProcessor
         $this->tempDocumentMainPart = $this->readPartWithRels($this->getMainPartName());
         $this->tempDocumentSettingsPart = $this->readPartWithRels($this->getSettingsPartName());
         $this->tempDocumentContentTypes = $this->zipClass->getFromName($this->getDocumentContentTypesName());
-	
-		$this->_countRels = 100;
     }
-	
-	/**
-	 * https://github.com/PHPOffice/PHPWord/issues/550#issuecomment-173124383
-	 * @param $strKey
-	 * @param $img
-	 */
-	public function setImg($strKey, $img)
-	{
-		// $strKey = '${' . $strKey . '}';
-		
-		$relationshipTemplate = '<Relationship Id="RID" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/IMG"/>';
-		$imageTemplate = '<w:pict><v:shape type="#_x0000_t75" style="width:WIDpx;height:HEIpx"><v:imagedata r:id="RID" o:title=""/></v:shape></w:pict>';
-		
-		$toAdd = $imagePart = $toAddType = '';
-		$aSearch = array('RID', 'IMG');
-		$aSearchType = array('IMG', 'EXT');
-		$this->_countRels++;
-		
-		$rid = 'rId' . $this->_countRels;
-		
-		$imgExt = pathinfo($img['src'], PATHINFO_EXTENSION);
-		$imgName = 'img' . $this->_countRels . '.' . $imgExt;
-		
-		$this->zipClass->deleteName('word/media/' . $imgName);
-		$this->zipClass->addFile($img['src'], 'word/media/' . $imgName);
-		
-		$contentTypeTemplate = '<Override PartName="/word/media/' . $imgName . '" ContentType="image/EXT"/>';
-		
-		list($w, $h) = getimagesize($img['src']);
-		
-		if (isset($img['swh'])) //Image proportionally larger side
-		{
-			$wh = 0;
-			$ht = 0;
-			if ($w <= $h) {
-				$ht = (int)$img['swh'];
-				$ot = $w / $h;
-				$wh = (int)$img['swh'] * $ot;
-				$wh = round($wh);
-			}
-			if ($w >= $h) {
-				$wh = (int)$img['swh'];
-				$ot = $h / $w;
-				$ht = (int)$img['swh'] * $ot;
-				$ht = round($ht);
-			}
-			$w = $wh;
-			$h = $ht;
-		}
-		
-		if (isset($img['size'])) {
-			$w = $img['size'][0];
-			$h = $img['size'][1];
-		}
-		
-		$imagePart .= str_replace(['RID', 'WID', 'HEI'], [$rid, $w, $h], $imageTemplate);
-		
-		$aReplace = array($imgName, $imgExt);
-		$toAddType .= str_replace($aSearchType, $aReplace, $contentTypeTemplate);
-		
-		$aReplace = array($rid, $imgName);
-		$toAdd .= str_replace($aSearch, $aReplace, $relationshipTemplate);
-		
-		$this->tempDocumentMainPart = str_replace('<w:t>' . $strKey . '</w:t>', $imagePart, $this->tempDocumentMainPart);
-		
-		if ($this->_rels == "") {
-			$this->_rels = $this->zipClass->getFromName('word/_rels/document.xml.rels');
-			$this->_types = $this->zipClass->getFromName('[Content_Types].xml');
-		}
-		
-		$this->_types = str_replace('</Types>', $toAddType, $this->_types) . '</Types>';
-		$this->_rels = str_replace('</Relationships>', $toAdd, $this->_rels) . '</Relationships>';
-	}
-	
-	
+    
     /**
      * Expose zip class
      *
@@ -658,14 +578,12 @@ class TemplateProcessor
         $imgTpl = '<w:pict><v:shape type="#_x0000_t75" style="width:{WIDTH};height:{HEIGHT}"><v:imagedata r:id="{RID}" o:title=""/></v:shape></w:pict>';
 
         foreach ($searchParts as $partFileName => &$partContent) {
-            $partVariables = $this->getVariablesForPart($partContent);
+            // $partVariables = $this->getVariablesForPart($partContent);
 
             foreach ($searchReplace as $searchString => $replaceImage) {
-                $varsToReplace = array_filter($partVariables, function ($partVar) use ($searchString) {
-                    return ($partVar == $searchString) || preg_match('/^' . preg_quote($searchString) . ':/', $partVar);
-                });
-
-                foreach ($varsToReplace as $varNameWithArgs) {
+				$varsToReplace = $search;
+	
+				foreach ($varsToReplace as $varNameWithArgs) {
                     $varInlineArgs = $this->getImageArgs($varNameWithArgs);
                     $preparedImageAttrs = $this->prepareImageAttrs($replaceImage, $varInlineArgs);
                     $imgPath = $preparedImageAttrs['src'];
@@ -911,14 +829,7 @@ class TemplateProcessor
         }
 
         $this->savePartWithRels($this->getMainPartName(), $this->tempDocumentMainPart);
-
-		if ($this->_rels != "") {
-			$this->zipClass->addFromString('word/_rels/document.xml.rels', $this->_rels);
-		}
-		if ($this->_types != "") {
-			$this->zipClass->addFromString('[Content_Types].xml', $this->_types);
-		}
-		
+        
 		$this->savePartWithRels($this->getSettingsPartName(), $this->tempDocumentSettingsPart);
 
         foreach ($this->tempDocumentFooters as $index => $xml) {
